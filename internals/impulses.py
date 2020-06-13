@@ -1,8 +1,10 @@
+
 import numpy as np
 from scipy.special import gammaln, psi
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Dirichlet
+
 
 class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
     """
@@ -11,6 +13,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
     vectors of length B for each pair of processes, k and k', which
     we denote $\bbeta^{(k,k')}. This class contains all K^2 vectors.
     """
+
     def __init__(self, model, gamma=None):
         """
         Initialize a set of Dirichlet weight vectors.
@@ -27,7 +30,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
 
         if gamma is not None:
             assert np.isscalar(gamma) or \
-                   (isinstance(gamma, np.ndarray) and
+                (isinstance(gamma, np.ndarray) and
                     gamma.shape == (self.B,)), \
                 "gamma must be a scalar or a length B vector"
 
@@ -43,7 +46,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         self.resample()
 
         # Initialize mean field parameters
-        self.mf_gamma = self.gamma[None, None,:] * np.ones((self.K, self.K, self.B))
+        self.mf_gamma = self.gamma[None, None, :] * np.ones((self.K, self.K, self.B))
 
     @property
     def impulses(self):
@@ -59,10 +62,10 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         pass
 
     def log_likelihood(self, x):
-        '''
+        """
         log likelihood (either log probability mass function or log probability
         density function) of x, which has the same type as the output of rvs()
-        '''
+        """
         assert isinstance(x, np.ndarray) and x.shape == (self.K, self.K, self.B), \
             "x must be a KxKxB array of impulse responses"
 
@@ -70,7 +73,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         # Compute the normalization constant
         Z = gammaln(gamma).sum() - gammaln(gamma.sum())
         # Add the likelihood of x
-        return self.K**2 * Z + ((gamma-1.0)[None, None,:] * np.log(x)).sum()
+        return self.K**2 * Z + ((gamma-1.0)[None, None, :] * np.log(x)).sum()
 
     def log_probability(self):
         return self.log_likelihood(self.g)
@@ -80,17 +83,17 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         Resample the
         """
         ss = np.zeros((self.K, self.K, self.B)) + \
-             sum([d.compute_ir_ss() for d in data])
+            sum([d.compute_ir_ss() for d in data])
 
         for k1 in range(self.K):
             for k2 in range(self.K):
-                alpha_post = self.gamma + ss[k1, k2,:]
-                self.g[k1, k2,:] = np.random.dirichlet(alpha_post)
+                alpha_post = self.gamma + ss[k1, k2, :]
+                self.g[k1, k2, :] = np.random.dirichlet(alpha_post)
 
     def expected_g(self):
         # \sum_{b} \gamma_b
         trm2 = self.mf_gamma.sum(axis=2)
-        E_g = self.mf_gamma / trm2[:,:, None]
+        E_g = self.mf_gamma / trm2[:, :, None]
         return E_g
 
     def expected_log_g(self):
@@ -99,7 +102,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         # \psi(\sum_{b} \gamma_b)
         trm2 = psi(self.mf_gamma.sum(axis=2))
         for b in range(self.B):
-            E_lng[:,:, b] = psi(self.mf_gamma[:,:, b]) - trm2
+            E_lng[:, :, b] = psi(self.mf_gamma[:, :, b]) - trm2
 
         return E_lng
 
@@ -123,20 +126,20 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
 
     def get_vlb(self):
         """
-        Variational lower bound for \lambda_k^0
-        E[LN p(g | \gamma)] -
-        E[LN q(g | \tilde{\gamma})]
+        Variational lower bound for lambda_k^0
+        E[LN p(g | gamma)] -
+        E[LN q(g | tilde{gamma})]
         :return:
         """
         vlb = 0
 
         # First term
-        # E[LN p(g | \gamma)]
+        # E[LN p(g | gamma)]
         E_ln_g = self.expected_log_g()
-        vlb += Dirichlet(self.gamma[None, None,:]).negentropy(E_ln_g=E_ln_g).sum()
+        vlb += Dirichlet(self.gamma[None, None, :]).negentropy(E_ln_g=E_ln_g).sum()
 
         # Second term
-        # E[LN q(g | \tilde{gamma})]
+        # E[LN q(g | tilde{gamma})]
         vlb -= Dirichlet(self.mf_gamma).negentropy().sum()
 
         return vlb
@@ -149,7 +152,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         self.g = np.zeros((self.K, self.K, self.B))
         for k1 in range(self.K):
             for k2 in range(self.K):
-                self.g[k1, k2,:] = np.random.dirichlet(self.mf_gamma[k1, k2,:])
+                self.g[k1, k2, :] = np.random.dirichlet(self.mf_gamma[k1, k2, :])
 
 
 class SBMDirichletImpulseResponses(GibbsSampling):
@@ -158,6 +161,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
     vectors of length B for each pair of blocks, c and c', which
     we denote $\bbeta^{(c,c')}. This class contains all C^2 vectors.
     """
+
     def __init__(self, C, K, B, gamma=None):
         """
         Initialize a set of Dirichlet weight vectors.
@@ -172,7 +176,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
 
         if gamma is not None:
             assert np.isscalar(gamma) or \
-                   (isinstance(gamma, np.ndarray) and
+                (isinstance(gamma, np.ndarray) and
                     gamma.shape == (B,)), \
                 "gamma must be a scalar or a length B vector"
 
@@ -188,7 +192,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         self.resample()
 
         # Initialize mean field parameters
-        self.mf_gamma = self.gamma[None, None,:] * np.ones((self.C, self.C, self.B))
+        self.mf_gamma = self.gamma[None, None, :] * np.ones((self.C, self.C, self.B))
 
     def rvs(self, size=[]):
         """
@@ -199,10 +203,10 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         raise NotImplementedError()
 
     def log_likelihood(self, x):
-        '''
+        """
         log likelihood (either log probability mass function or log probability
         density function) of x, which has the same type as the output of rvs()
-        '''
+        """
         raise NotImplementedError()
         assert isinstance(x, np.ndarray) and x.shape == (self.K, self.K, self.B), \
             "x must be a KxKxB array of impulse responses"
@@ -211,7 +215,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         # Compute the normalization constant
         Z = gammaln(gamma).sum() - gammaln(gamma.sum())
         # Add the likelihood of x
-        return self.K**2 * Z + ((gamma-1.0)[None, None,:] * np.log(x)).sum()
+        return self.K**2 * Z + ((gamma-1.0)[None, None, :] * np.log(x)).sum()
 
     def log_probability(self):
         return self.log_likelihood(self.g)
@@ -239,17 +243,17 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         """
         raise NotImplementedError()
         assert data is None or \
-               (isinstance(data, np.ndarray) and
-                data.ndim == 4 and
-                data.shape[1] == data.shape[2] == self.K
-                and data.shape[3] == self.B), \
+            (isinstance(data, np.ndarray) and
+             data.ndim == 4 and
+             data.shape[1] == data.shape[2] == self.K
+             and data.shape[3] == self.B), \
             "Data must be a TxKxKxB array of parents"
 
         ss = self._get_suff_statistics(data)
         for k1 in range(self.K):
             for k2 in range(self.K):
-                alpha_post = self.gamma + ss[k1, k2,:]
-                self.g[k1, k2,:] = np.random.dirichlet(alpha_post)
+                alpha_post = self.gamma + ss[k1, k2, :]
+                self.g[k1, k2, :] = np.random.dirichlet(alpha_post)
 
     def expected_g(self):
         """
@@ -259,7 +263,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         raise NotImplementedError()
         # \sum_{b} \gamma_b
         trm2 = self.mf_gamma.sum(axis=2)
-        E_g = self.mf_gamma / trm2[:,:, None]
+        E_g = self.mf_gamma / trm2[:, :, None]
         return E_g
 
     def expected_log_g(self):
@@ -273,7 +277,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         # \psi(\sum_{b} \gamma_b)
         trm2 = psi(self.mf_gamma.sum(axis=2))
         for b in range(self.B):
-            E_lng[:,:, b] = psi(self.mf_gamma[:,:, b]) - trm2
+            E_lng[:, :, b] = psi(self.mf_gamma[:, :, b]) - trm2
 
         return E_lng
 
@@ -295,9 +299,9 @@ class SBMDirichletImpulseResponses(GibbsSampling):
 
     def get_vlb(self):
         """
-        Variational lower bound for \lambda_k^0
-        E[LN p(g | \gamma)] -
-        E[LN q(g | \tilde{\gamma})]
+        Variational lower bound for lambda_k^0
+        E[LN p(g | gamma)] -
+        E[LN q(g | \tilde{gamma})]
         :return:
         """
         raise NotImplementedError()
@@ -306,7 +310,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         # First term
         # E[LN p(g | \gamma)]
         E_ln_g = self.expected_log_g()
-        vlb += Dirichlet(self.gamma[None, None,:]).negentropy(E_ln_g=E_ln_g).sum()
+        vlb += Dirichlet(self.gamma[None, None, :]).negentropy(E_ln_g=E_ln_g).sum()
 
         # Second term
         # E[LN q(g | \tilde{gamma})]
@@ -323,9 +327,9 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         self.g = np.zeros((self.K, self.K, self.B))
         for k1 in range(self.K):
             for k2 in range(self.K):
-                self.g[k1, k2,:] = np.random.dirichlet(self.mf_gamma[k1, k2,:])
+                self.g[k1, k2, :] = np.random.dirichlet(self.mf_gamma[k1, k2, :])
 
-'''
+
 class ContinuousTimeGammaImpulseResponses(GibbsSampling):
     def __init__(self, model,
                  alpha_shape=1., beta_shape=1.,
@@ -342,8 +346,8 @@ class ContinuousTimeGammaImpulseResponses(GibbsSampling):
         # set initial value to mean of prior
         # using mu --> alpha and tau --> beta because main model classes
         # are hardwired that way
-        self.mu = np.ones((self.K,self.K))
-        self.tau = np.ones((self.K,self.K))
+        self.mu = np.ones((self.K, self.K))
+        self.tau = np.ones((self.K, self.K))
         self.resample()
 
     @property
@@ -351,9 +355,9 @@ class ContinuousTimeGammaImpulseResponses(GibbsSampling):
         N_pts = 50
         t = np.linspace(0, self.dt_max, N_pts)
         ir = np.zeros((N_pts, self.K, self.K))
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
-                ir[:,k1,k2] = self.impulse(t, k1, k2)
+        for k1 in range(self.K):
+            for k2 in range(self.K):
+                ir[:, k1, k2] = self.impulse(t, k1, k2)
         return t, ir
 
     def impulse(self, dt, k1, k2):
@@ -361,11 +365,10 @@ class ContinuousTimeGammaImpulseResponses(GibbsSampling):
         Impulse response induced by an event on process k1 on
         the rate of process k2 at lag dt
         """
-        lmbda = self.lmbda[k1,k2]
-        return self._impulse(dt,lmbda)
+        lmbda = self.lmbda[k1, k2]
+        return self._impulse(dt, lmbda)
 
     def _impulse(self, dt, lmbda):
-        from pyhawkes.utils.utils import logit
         return lmbda * np.exp(-lmbda*dt)
 
     def rvs(self, size=[]):
@@ -383,24 +386,18 @@ class ContinuousTimeGammaImpulseResponses(GibbsSampling):
         for d in data:
             ss += d.compute_gamma_imp_suff_stats()
 
-    def _get_conditional_shape_distribution(self,imp_ss):
+    def _get_conditional_shape_distribution(self, imp_ss):
         alpha_0, beta_0 = self.alpha_shape, self.beta_shape
-        n = imp_ss[0]
-        xsum = imp_ss[1]
-        xprod = imp_ss[2]
+        return (alpha_0, beta_0)
 
-        return (alpha_post, beta_post)
-
-    def _get_conditional_scale_distribution(self,imp_ss):
+    def _get_conditional_scale_distribution(self, imp_ss):
         alpha_0, beta_0 = self.alpha_scale, self.beta_scale
         n = imp_ss[0]
         xsum = imp_ss[1]
-        xprod = imp_ss[2]
 
         alpha_post = alpha_0 + n
-        beta_post = beta_0 / (1 + beta_0 * dsum)
+        beta_post = beta_0 / (1 + beta_0 * xsum)
         return (alpha_post, beta_post)
-
 
     def resample(self, data=[]):
         # get posterior gamma distribution shapes
@@ -422,21 +419,22 @@ class ContinuousTimeGammaImpulseResponses(GibbsSampling):
         assert np.isfinite(self.mu).all()
         assert np.isfinite(self.tau).all()
 
-        alpha_shape_post, beta_shape_post = self._get_conditional_distribution(ss)
-        self.mu = np.array(np.random.gamma(alpha_shape_post, 1.0/beta_shape_post)).reshape((self.K, self.K))
-        alpha_scale_post, beta_scale_post = self._get_conditional_scale_distribution(ss)
-        self.tau = np.array(np.random.gamma(alpha_scale_post, 1.0/beta_scale_post)).reshape((self.K, self.K))
-'''
+        # alpha_shape_post, beta_shape_post = self._get_conditional_distribution(ss)
+        # self.mu = np.array(np.random.gamma(alpha_shape_post, 1.0/beta_shape_post)).reshape((self.K, self.K))
+        # alpha_scale_post, beta_scale_post = self._get_conditional_scale_distribution(ss)
+        # self.tau = np.array(np.random.gamma(alpha_scale_post, 1.0/beta_scale_post)).reshape((self.K, self.K))
+
 
 class ContinuousTimeImpulseResponses(GibbsSampling):
     """
     Continuous time impulse response model with logistic normal
     impulse response functions.
 
-    Option to specify a subset of the logit normal (0,1) support to
+    Option to specify a subset of the logit normal(0, 1) support to
     actually act as the impulse
 
     """
+
     def __init__(self, model, mu_0=0., lmbda_0=1., alpha_0=1., beta_0=1., support=None):
         self.model = model
         self.K = model.K
@@ -495,7 +493,7 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
 
     def translate_dt(self, dt):
         """
-        translate dt, in range (0,dt_max)
+        translate dt, in range(0, dt_max)
         to the corresponding dt value if support were as specified
         """
         support, support_width, dt_max = self.support, self.support_width, self.dt_max
@@ -505,16 +503,16 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
     def rvs(self, size=[]):
         """
         Sample random variables from the Dirichlet impulse response distribution.
-        :param size:
-        :return:
+        : param size:
+        : return:
         """
         pass
 
     def log_likelihood(self, x):
-        '''
-        log likelihood (either log probability mass function or log probability
+        """
+        log likelihood(either log probability mass function or log probability
         density function) of x, which has the same type as the output of rvs()
-        '''
+        """
         return 0
 
     def log_probability(self):
@@ -545,7 +543,7 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
     def resample(self, data=[]):
         """
         Resample the
-        :param data: a TxKxKxB array of parents. T time bins, K processes,
+        : param data: a TxKxKxB array of parents. T time bins, K processes,
                      K parent processes, and B bases for each parent process.
         """
         assert data is None or isinstance(data, list)

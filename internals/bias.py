@@ -1,13 +1,16 @@
+
 import numpy as np
 from scipy.special import gammaln, psi
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Gamma
 
+
 class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
     """
     Encapsulates the vector of K gamma-distributed bias variables.
     """
+
     def __init__(self, model, alpha, beta):
         """
         Initialize a bias vector for each of the K processes.
@@ -29,22 +32,22 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
         # Initialize mean field parameters
         self.mf_alpha = self.alpha * np.ones(self.K)
-        self.mf_beta  = self.beta  * np.ones(self.K)
+        self.mf_beta = self.beta * np.ones(self.K)
 
     def log_likelihood(self, x):
         assert isinstance(x, np.ndarray) and x.shape == (self.K,), \
             "x must be a K-vector of background rates"
 
         return self.K * (self.alpha * np.log(self.beta) - gammaln(self.alpha)) + \
-               ((self.alpha-1) * np.log(x) - self.beta * x).sum()
+            ((self.alpha-1) * np.log(x) - self.beta * x).sum()
 
     def log_probability(self):
         return self.log_likelihood(self.lambda0)
 
-    def rvs(self,size=[]):
+    def rvs(self, size=[]):
         return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
 
-    ### Gibbs Sampling
+    # Gibbs Sampling
     def _get_suff_statistics(self, Z0):
         """
         Compute the sufficient statistics from the data set.
@@ -55,10 +58,10 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
         if len(Z0) > 0:
             # ss[0,k] = sum_t Z0[t,k]
-            ss[0,:] = Z0.sum(axis=0)
+            ss[0, :] = Z0.sum(axis=0)
             # ss[1,k] = T * dt
             T = Z0.shape[0]
-            ss[1,:] = T * self.dt
+            ss[1, :] = T * self.dt
 
         return ss
 
@@ -69,15 +72,15 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         :param data: Z0, a TxK matrix of events assigned to the background.
         """
         ss = np.zeros((2, self.K)) + \
-             sum([d.compute_bkgd_ss() for d in data])
+            sum([d.compute_bkgd_ss() for d in data])
 
-        alpha_post = self.alpha + ss[0,:]
-        beta_post  = self.beta + ss[1,:]
+        alpha_post = self.alpha + ss[0, :]
+        beta_post = self.beta + ss[1, :]
 
         self.lambda0 = np.array(np.random.gamma(alpha_post,
                                                 1.0/beta_post)).reshape((self.K, ))
 
-    ### Mean Field
+    # Mean Field
     def expected_lambda0(self):
         return self.mf_alpha / self.mf_beta
 
@@ -97,8 +100,7 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         self.mf_alpha = (1-stepsize) * self.mf_alpha + stepsize * alpha_hat
 
         beta_hat = self.beta + exp_ss[1] / minibatchfrac
-        self.mf_beta  = (1-stepsize) * self.mf_beta + stepsize * beta_hat
-
+        self.mf_beta = (1-stepsize) * self.mf_beta + stepsize * beta_hat
 
     def meanfieldupdate(self, data=[]):
         self.mf_update_lambda0(data)
@@ -108,9 +110,9 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
     def get_vlb(self):
         """
-        Variational lower bound for \lambda_k^0
-        E[LN p(\lambda_k^0 | \alpha, \beta)] -
-        E[LN q(\lambda_k^0 | \tilde{\alpha}, \tilde{\beta})]
+        Variational lower bound for lambda_k^0
+        E[LN p(lambda_k^0 | alpha, beta)] -
+        E[LN q(lambda_k^0 | tilde{alpha}, tilde{beta})]
         :return:
         """
         vlb = 0
@@ -129,7 +131,6 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
         return vlb
 
-
     def resample_from_mf(self):
         """
         Resample from the mean field distribution
@@ -138,11 +139,11 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         self.lambda0 = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
 
 
-
 class ContinuousTimeGammaBias(GibbsSampling):
     """
     Encapsulates the vector of K gamma-distributed bias variables.
     """
+
     def __init__(self, model, K, alpha, beta):
         """
         Initialize a bias vector for each of the K processes.
@@ -166,15 +167,15 @@ class ContinuousTimeGammaBias(GibbsSampling):
             "x must be a K-vector of background rates"
 
         return self.K * (self.alpha * np.log(self.beta) - gammaln(self.alpha)) + \
-               ((self.alpha-1) * np.log(x) - self.beta * x).sum()
+            ((self.alpha-1) * np.log(x) - self.beta * x).sum()
 
     def log_probability(self):
         return self.log_likelihood(self.lambda0)
 
-    def rvs(self,size=[]):
+    def rvs(self, size=[]):
         return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
 
-    ### Gibbs Sampling
+    # Gibbs Sampling
     def _get_suff_statistics(self, data):
         """
         Compute the sufficient statistics from the data set.
@@ -185,27 +186,27 @@ class ContinuousTimeGammaBias(GibbsSampling):
 
         for d in data:
             # ss[0,k] = sum_t Z0[t,k]
-            ss[0,:] = d.bkgd_ss
+            ss[0, :] = d.bkgd_ss
             # ss[1,k] = T
-            ss[1,:] = d.T
+            ss[1, :] = d.T
 
         return ss
 
     def _get_conditional_distribution(self, data, num_ignore=None):
-        '''
+        """
         Optional parameter num_ignore allows user to reduce the
         background sufficient statistics as computed by the parents
         (number of base-rate events for each process to ignore)
-        '''
+        """
         ss = self._get_suff_statistics(data)
         if num_ignore is None:
             num_ignore = np.zeros(ss[0].shape)
         assert (num_ignore.shape == ss[0].shape)
-        alpha_post = self.alpha + ss[0,:] - num_ignore
-        beta_post  = self.beta + ss[1,:]
+        alpha_post = self.alpha + ss[0, :] - num_ignore
+        beta_post = self.beta + ss[1, :]
         return (alpha_post, beta_post)
 
-    def resample(self,data=[]):
+    def resample(self, data=[]):
         """
         Resample the background rate from its gamma conditional distribution.
 

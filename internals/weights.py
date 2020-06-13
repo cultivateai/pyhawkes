@@ -1,15 +1,14 @@
 
 import numpy as np
-from scipy.special import gammaln, psi
-from scipy.special import logsumexp
-
 from joblib import Parallel, delayed
+from scipy.special import gammaln, logsumexp, psi
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
+from pyhawkes.internals.continuous_time_helpers import \
+    compute_weighted_impulses_at_events
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.internals.weight_updates import resample_A_col
 from pyhawkes.utils.utils import logistic, logit
-from pyhawkes.internals.continuous_time_helpers import compute_weighted_impulses_at_events
 
 
 def ct_resample_column_of_A_fast(args):
@@ -28,6 +27,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
     KxK gamma weight matrix. Implements Gibbs sampling given
     the parent variables.
     """
+
     def __init__(self, model, parallel_resampling=True):
         """
         Initialize the spike-and-slab gamma weight model with either a
@@ -74,7 +74,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
 
         # Add the LL of the gamma weights
         lp_W = kappa * np.log(v) - gammaln(kappa) + \
-               (kappa-1) * np.log(W) - v * W
+            (kappa-1) * np.log(W) - v * W
         ll += (A*lp_W).sum()
 
         return ll
@@ -82,7 +82,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
     def log_probability(self):
         return self.log_likelihood((self.A, self.W))
 
-    def rvs(self,size=[]):
+    def rvs(self, size=[]):
         A = np.random.rand(self.K, self.K) < self.network.P
         W = np.random.gamma(self.network.kappa, 1.0/self.network.V,
                             size(self.K, self.K))
@@ -146,7 +146,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 # Sample A given conditional probability
                 lp0 = ll0 + np.log(1.0 - p[k1, k2])
                 lp1 = ll1 + np.log(p[k1, k2])
-                Z   = logsumexp([lp0, lp1])
+                Z = logsumexp([lp0, lp1])
 
                 # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
                 #           = lp1 - ln(exp(lp0) + exp(lp1))
@@ -159,13 +159,13 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         :return:
         """
         ss = np.zeros((2, self.K, self.K)) + \
-             sum([d.compute_weight_ss() for d in data])
+            sum([d.compute_weight_ss() for d in data])
 
         # Account for whether or not a connection is present in N
         ss[1] *= self.A
 
         kappa_post = self.network.kappa + ss[0]
-        v_post  = self.network.V + ss[1 ]
+        v_post = self.network.V + ss[1]
 
         self.W = np.atleast_1d(np.random.gamma(kappa_post, 1.0/v_post)).reshape((self.K, self.K))
 
@@ -185,11 +185,13 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         else:
             self._resample_A_given_W(data)
 
+
 class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
     """
+
     def __init__(self, model, kappa_0=0.1, nu_0=10.0, Amask=None):
         """
         Initialize the spike-and-slab gamma weight model with either a
@@ -211,7 +213,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
 
         # Save gamma parameters
         self.kappa_0 = kappa_0
-        self.nu_0    = nu_0
+        self.nu_0 = nu_0
 
         # Initialize parameters A and W
         Amask = np.ones((self.K, self.K)) if Amask is None else Amask
@@ -265,10 +267,10 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         #             + (kappa-1) * np.log(W) - v * W)
 
         lp_W0 = (self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
-                    + (self.kappa_0-1) * np.log(W) - self.nu_0 * W)[A==0]
+                 + (self.kappa_0-1) * np.log(W) - self.nu_0 * W)[A == 0]
 
         lp_W1 = (kappa * np.log(v) - gammaln(kappa)
-                    + (kappa-1) * np.log(W) - v * W)[A==1]
+                 + (kappa-1) * np.log(W) - v * W)[A == 1]
 
         # lp_W = A * (kappa * np.log(v) - gammaln(kappa)
         #             + (kappa-1) * np.log(W) - v * W) + \
@@ -281,7 +283,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     def log_probability(self):
         return self.log_likelihood((self.A, self.W))
 
-    def rvs(self,size=[]):
+    def rvs(self, size=[]):
         raise NotImplementedError()
 
     def expected_A(self):
@@ -292,7 +294,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         Compute the expected W under the variational approximation
         """
         p_A = self.expected_A()
-        E_W =  p_A * self.expected_W_given_A(1.0) + (1-p_A) * self.expected_W_given_A(0.0)
+        E_W = p_A * self.expected_W_given_A(1.0) + (1-p_A) * self.expected_W_given_A(0.0)
 
         E_W[np.nonzero(1-self.Amask)] = 1e-8
         if not self.network.allow_self_connections:
@@ -306,7 +308,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         :param A:   Either zero or 1
         """
         return A * (self.mf_kappa_1 / self.mf_v_1) + \
-               (1.0 - A) * (self.mf_kappa_0 / self.mf_v_0)
+            (1.0 - A) * (self.mf_kappa_0 / self.mf_v_0)
 
     def std_A(self):
         """
@@ -321,8 +323,8 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         """
         p_A = self.expected_A()
 
-        E_ln_W =  p_A * self.expected_log_W_given_A(1.0) + \
-               (1-p_A) * self.expected_log_W_given_A(0.0)
+        E_ln_W = p_A * self.expected_log_W_given_A(1.0) + \
+            (1-p_A) * self.expected_log_W_given_A(0.0)
 
         E_ln_W[np.nonzero(1.-self.Amask)] = np.log(1e-8)
         if not self.network.allow_self_connections:
@@ -335,7 +337,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         Compute the expected log W given A under the variational approximation
         """
         return A * (psi(self.mf_kappa_1) - np.log(self.mf_v_1)) + \
-               (1.0 - A) * (psi(self.mf_kappa_0) - np.log(self.mf_v_0))
+            (1.0 - A) * (psi(self.mf_kappa_0) - np.log(self.mf_v_0))
 
     def expected_log_likelihood(self, x):
         raise NotImplementedError()
@@ -356,7 +358,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         # self.mf_p = (1.0 - stepsize) * self.mf_p + stepsize * p_hat
 
         logit_p_hat = (1-stepsize) * logit(self.mf_p) + \
-                       stepsize * logit_p
+            stepsize * logit_p
         # self.mf_p = logistic(logit_p_hat)
         raw_mf_p = logistic(logit_p_hat)
         self.mf_p = np.clip(self.Amask * raw_mf_p, 1e-8, 1-1e-8)
@@ -401,32 +403,28 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
 
         # First term:
         # E[LN p(A | p)]
-        E_A       = self.expected_A()
-        E_notA    = 1.0 - E_A
-        E_ln_p    = self.network.expected_log_p()
+        E_A = self.expected_A()
+        E_notA = 1.0 - E_A
+        E_ln_p = self.network.expected_log_p()
         E_ln_notp = self.network.expected_log_notp()
         vlb += Bernoulli().negentropy(E_x=E_A, E_notx=E_notA,
                                       E_ln_p=E_ln_p, E_ln_notp=E_ln_notp).sum()
-        # print "E_A: %s, E_ln_p: %s, negentropy: %s" % (E_A,E_ln_p,Bernoulli().negentropy(E_x=E_A, E_notx=E_notA,E_ln_p=E_ln_p, E_ln_notp=E_ln_notp).sum())
 
         # E[LN p(W | A=1, kappa, v)]
-        kappa     = self.network.kappa
-        E_v       = self.network.expected_v()
-        E_ln_v    = self.network.expected_log_v()
-        E_W1      = self.expected_W_given_A(A=1)
-        E_ln_W1   = self.expected_log_W_given_A(A=1)
+        kappa = self.network.kappa
+        E_v = self.network.expected_v()
+        E_ln_v = self.network.expected_log_v()
+        E_W1 = self.expected_W_given_A(A=1)
+        E_ln_W1 = self.expected_log_W_given_A(A=1)
         vlb += (E_A * Gamma(kappa).negentropy(E_beta=E_v, E_ln_beta=E_ln_v,
                                               E_lambda=E_W1, E_ln_lambda=E_ln_W1)).sum()
-        # print "E_v: %s, E_ln_v: %s, E_W1: %s, E_ln_W1: %s, negentropy: %s" % (E_v,E_ln_v,E_W1,E_ln_W1,(E_A * Gamma(kappa).negentropy(E_beta=E_v, E_ln_beta=E_ln_v, E_lambda=E_W1, E_ln_lambda=E_ln_W1)).sum())
-
 
         # E[LN p(W | A=0, kappa0, v0)]
-        kappa0    = self.kappa_0
-        v0        = self.nu_0
-        E_W0      = self.expected_W_given_A(A=0)
-        E_ln_W0   = self.expected_log_W_given_A(A=0)
+        kappa0 = self.kappa_0
+        v0 = self.nu_0
+        E_W0 = self.expected_W_given_A(A=0)
+        E_ln_W0 = self.expected_log_W_given_A(A=0)
         vlb += (E_notA * Gamma(kappa0, v0).negentropy(E_lambda=E_W0, E_ln_lambda=E_ln_W0)).sum()
-        # print "kappa0: %s, v0: %s, E_W0: %s, E_ln_W0: %s, negentropy: %s" % (kappa0,v0,E_W0,E_ln_W0,(E_notA * Gamma(kappa0, v0).negentropy(E_lambda=E_W0, E_ln_lambda=E_ln_W0)).sum())
 
         # Second term
         # E[LN q(A)]
@@ -434,9 +432,8 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         # print "mf_p: %s, negent: %s" % (self.mf_p, Bernoulli(self.mf_p).negentropy().sum())
 
         # E[LN q(W | A=1)]
-        vlb -= (E_A    * Gamma(self.mf_kappa_1, self.mf_v_1).negentropy()).sum()
+        vlb -= (E_A * Gamma(self.mf_kappa_1, self.mf_v_1).negentropy()).sum()
         vlb -= (E_notA * Gamma(self.mf_kappa_0, self.mf_v_0).negentropy()).sum()
-        # print "mf_kappa_1: %s, mf_v_1: %s, mf_kappa_0: %s, mf_v_0: %s" % (self.mf_kappa_1, self.mf_v_1, self.mf_kappa_0, self.mf_v_0)
 
         return vlb
 
@@ -451,7 +448,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
 
     def resample(self, data=[]):
         ss = np.zeros((2, self.K, self.K)) + \
-             sum([d.compute_weight_ss() for d in data])
+            sum([d.compute_weight_ss() for d in data])
 
         # First resample A from its marginal distribution after integrating out W
         self._resample_A(ss)
@@ -468,26 +465,26 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         p = self.network.P
         v = self.network.V
 
-        kappa0_post = self.kappa_0 + ss[0,:,:]
-        v0_post     = self.nu_0 + ss[1,:,:]
+        kappa0_post = self.kappa_0 + ss[0, :, :]
+        v0_post = self.nu_0 + ss[1, :, :]
 
-        kappa1_post = self.network.kappa + ss[0,:,:]
-        v1_post     = v + ss[1,:,:]
+        kappa1_post = self.network.kappa + ss[0, :, :]
+        v1_post = v + ss[1, :, :]
 
         # Compute the marginal likelihood of A=1 and of A=0
         # The result of the integral is a ratio of gamma distribution normalizing constants
-        lp0  = self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
+        lp0 = self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
         lp0 += gammaln(kappa0_post) - kappa0_post * np.log(v0_post)
 
-        lp1  = self.network.kappa * np.log(v) - gammaln(self.network.kappa)
+        lp1 = self.network.kappa * np.log(v) - gammaln(self.network.kappa)
         lp1 += gammaln(kappa1_post) - kappa1_post * np.log(v1_post)
 
         # Add the prior and normalize
         lp0 = lp0 + np.log(1.0 - p)
         lp1 = lp1 + np.log(p)
-        Z   = logsumexp(np.concatenate((lp0[:,:, None], lp1[:,:, None]),
-                                       axis=2),
-                        axis=2)
+        Z = logsumexp(np.concatenate((lp0[:, :, None], lp1[:, :, None]),
+                                     axis=2),
+                      axis=2)
 
         # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
         #           = lp1 - ln(exp(lp0) + exp(lp1))
@@ -498,14 +495,14 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     def _resample_W_given_A(self, ss):
         # import pdb; pdb.set_trace()
         kappa_prior = self.kappa_0 * (1-self.A) + self.network.kappa * self.A
-        kappa_cond  = kappa_prior + ss[0,:,:]
+        kappa_cond = kappa_prior + ss[0, :, :]
 
-        v_prior     = self.nu_0 * (1-self.A) + self.network.V * self.A
-        v_cond      = v_prior + ss[1,:,:]
+        v_prior = self.nu_0 * (1-self.A) + self.network.V * self.A
+        v_cond = v_prior + ss[1, :, :]
 
         # Resample W from its gamma conditional
         self.W = np.array(np.random.gamma(kappa_cond, 1.0/v_cond)).\
-                        reshape((self.K, self.K))
+            reshape((self.K, self.K))
 
         self.W = np.clip(self.Amask * self.W, 1e-8, np.inf)
 
@@ -524,16 +521,17 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
 
         # Set variational weight distribution
         self.mf_kappa_0 = self.kappa_0
-        self.mf_v_0     = self.nu_0
+        self.mf_v_0 = self.nu_0
 
         self.mf_kappa_1 = scale * W
-        self.mf_v_1     = scale
+        self.mf_v_1 = scale
 
 
 class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
     """
     Implementation of spike and slab gamma weights from L&A 2014
     """
+
     def __init__(self, model, parallel_resampling=True, Amask=None):
         self.model = model
         self.network = model.network
@@ -556,7 +554,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
     def log_probability(self):
         return 0
 
-    def rvs(self,size=[]):
+    def rvs(self, size=[]):
         raise NotImplementedError
 
     @property
@@ -568,7 +566,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         # Sum over potential parents.
 
         # TODO: Call cython function to evaluate instantaneous rate
-        N, S, C, Z, dt_max = data.N, data.S, data.C, data.Z, self.model.dt_max
+        N, S, C, _, dt_max = data.N, data.S, data.C, data.Z, self.model.dt_max
         W = self.W
 
         # Initialize matrix of weighted impulses from each process
@@ -631,7 +629,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 ll -= self.W_effective[:, k].dot(Ns)
 
                 # + \sum_n log(lambda(s_n))
-                ll += np.log(lmbda0[k] + np.sum(self.A[:, k] * lmbda_ir[C==k,:], axis=1)).sum()
+                ll += np.log(lmbda0[k] + np.sum(self.A[:, k] * lmbda_ir[C == k, :], axis=1)).sum()
             return ll
 
         # TODO: Write a Cython function to sample this more efficiently
@@ -664,13 +662,12 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 # Sample A given conditional probability
                 lp0 = ll0 + np.log(1.0 - p[k1, k2])
                 lp1 = ll1 + np.log(p[k1, k2])
-                Z   = logsumexp([lp0, lp1])
+                Z = logsumexp([lp0, lp1])
 
                 self.A[k1, k2] = np.log(np.random.rand()) < lp1 - Z
 
         # sys.stdout.write('\n')
         # sys.stdout.flush()
-
 
     def _joblib_resample_A_given_W(self, data):
         """
@@ -684,7 +681,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
             return
 
         # pull params from data
-        data = data[0] # only consider first data
+        data = data[0]  # only consider first data
         S = data.S
         N = data.N
         Ns = data.Ns.copy(order='C').astype('float64')
@@ -716,20 +713,19 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 W_k = W[:, k2].copy(order='C').astype('float64')
                 A_mask = self.Amask[:, k2].copy(order='C').astype('float64')
                 lambda0_k = float(lambda0[k2])
-                lambda_ir_k = lambda_ir[C==k2,:].copy(order='C').astype('float64')
+                lambda_ir_k = lambda_ir[C == k2, :].copy(order='C').astype('float64')
                 args = (P_k, self.K, Ns, T, W_k,
                         lambda0_k, A_mask, A_col, lambda_ir_k)
                 yield args
 
         A_cols = list(map(ct_resample_column_of_A_fast, yieldArgs()))
 
-        '''
+        """
         A_cols = Parallel(n_jobs=-1, backend="multiprocessing")(
             delayed(ct_resample_column_of_A_fast)(_) for _ in yieldArgs())
-        '''
+        """
 
         self.A = np.array(A_cols).T * self.Amask
-
 
     def resample_W_given_A_and_z(self, data):
         """
@@ -747,7 +743,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
             Zsum += d.weight_ss
             N += d.Ns
         kappa_post = self.network.kappa + Zsum
-        v_post  = self.network.V + N[:, None] * self.A
+        v_post = self.network.V + N[:, None] * self.A
         return (kappa_post, v_post)
 
     def resample(self, data=[]):
@@ -759,7 +755,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         """
         assert isinstance(data, list)
 
-        '''
+        """
         # Compute sufficient statistics
         N = np.zeros((self.K,))
         Zsum = np.zeros((self.K, self.K))
@@ -769,7 +765,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
 
         # Resample W | A, Z
         self.resample_W_given_A_and_z(N, Zsum)
-        '''
+        """
 
         # Resample W | A, Z
         self.resample_W_given_A_and_z(data)

@@ -1,32 +1,32 @@
 """
 Top level classes for the Hawkes process model.
 """
+
 import abc
 import copy
-from datetime import datetime
 
 import numpy as np
-from scipy.special import gammaln
 from scipy.optimize import minimize
 
 from pybasicbayes.abstractions import ModelGibbsSampling, ModelMeanField
-from pybasicbayes.util.text import progprint_xrange
-
 from pyhawkes.internals.bias import GammaBias
-from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
+from pyhawkes.internals.network import (ErdosRenyiFixedSparsity,
+                                        StochasticBlockModel)
 from pyhawkes.internals.parents import DiscreteTimeParents
-from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity, ErdosRenyiFixedSparsity
+from pyhawkes.internals.weights import (GammaMixtureWeights,
+                                        SpikeAndSlabGammaWeights)
 from pyhawkes.utils.basis import CosineBasis
 
-
 # TODO: Add a simple HomogeneousPoissonProcessModel
+
 
 class DiscreteTimeStandardHawkesModel(object):
     """
     Discrete time standard Hawkes process model with support for
     regularized (stochastic) gradient descent.
     """
+
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha=1.0, beta=1.0,
@@ -77,7 +77,7 @@ class DiscreteTimeStandardHawkesModel(object):
 
     def _remove_self_weights(self):
         for k in range(self.K):
-                self.weights[k, 1+(k*self.B):1+(k+1)*self.B] = 1e-32
+            self.weights[k, 1+(k*self.B):1+(k+1)*self.B] = 1e-32
 
     def initialize_with_gibbs_model(self, gibbs_model):
         """
@@ -95,8 +95,8 @@ class DiscreteTimeStandardHawkesModel(object):
         g = gibbs_model.impulse_model.g
 
         for k in range(self.K):
-            self.weights[k, 0]  = lambda0[k]
-            self.weights[k, 1:] = (Weff[:, k][:, None] * g[:, k,:]).ravel()
+            self.weights[k, 0] = lambda0[k]
+            self.weights[k, 1:] = (Weff[:, k][:, None] * g[:, k, :]).ravel()
 
         if not self.allow_self_connections:
             self._remove_self_weights()
@@ -147,7 +147,6 @@ class DiscreteTimeStandardHawkesModel(object):
 
         return G
 
-
     def add_data(self, S, F=None, minibatchsize=None):
         """
         Add a data set to the list of observations.
@@ -158,8 +157,8 @@ class DiscreteTimeStandardHawkesModel(object):
                   and each process.
         """
         assert isinstance(S, np.ndarray) and S.ndim == 2 and S.shape[1] == self.K \
-               and np.amin(S) >= 0 and S.dtype == np.int, \
-               "Data must be a TxK array of event counts"
+            and np.amin(S) >= 0 and S.dtype == np.int, \
+            "Data must be a TxK array of event counts"
 
         T = S.shape[0]
 
@@ -183,8 +182,8 @@ class DiscreteTimeStandardHawkesModel(object):
         if minibatchsize is not None:
             for offset in np.arange(T, step=minibatchsize):
                 end = min(offset+minibatchsize, T)
-                S_mb = S[offset:end,:]
-                F_mb = F[offset:end,:]
+                S_mb = S[offset:end, :]
+                F_mb = F[offset:end, :]
 
                 # Add minibatch to the data list
                 self.data_list.append((S_mb, F_mb))
@@ -211,7 +210,7 @@ class DiscreteTimeStandardHawkesModel(object):
     def copy_sample(self):
         """
         Return a copy of the parameters of the model
-        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        :return: The parameters of the model (A,W,lambda_0, beta)
         """
         # return copy.deepcopy(self.get_parameters())
 
@@ -242,13 +241,13 @@ class DiscreteTimeStandardHawkesModel(object):
             ks = np.arange(self.K)
 
         if isinstance(ks, int):
-            R = F.dot(self.weights[ks,:])
+            R = F.dot(self.weights[ks, :])
             return R
 
         elif isinstance(ks, np.ndarray):
             Rs = []
             for k in ks:
-                Rs.append(F.dot(self.weights[k,:])[:, None])
+                Rs.append(F.dot(self.weights[k, :])[:, None])
             return np.concatenate(Rs, axis=1)
 
         else:
@@ -265,7 +264,7 @@ class DiscreteTimeStandardHawkesModel(object):
             # lp += (self.alpha * np.log(self.weights[k,1:])).sum()
             # lp += (-self.beta * self.weights[k,1:]).sum()
             if self.alpha > 1:
-                lp += (self.alpha -1) * np.log(self.weights[k, 1:]).sum()
+                lp += (self.alpha - 1) * np.log(self.weights[k, 1:]).sum()
             lp += (-self.beta * self.weights[k, 1:]).sum()
         return lp
 
@@ -286,9 +285,9 @@ class DiscreteTimeStandardHawkesModel(object):
             R = self.compute_rate(index, ks=ks)
 
             if ks is not None:
-                ll += (S[:, ks] * np.log(R) -R*self.dt).sum()
+                ll += (S[:, ks] * np.log(R) - R*self.dt).sum()
             else:
-                ll += (S * np.log(R) -R*self.dt).sum()
+                ll += (S * np.log(R) - R*self.dt).sum()
 
         return ll
 
@@ -352,7 +351,7 @@ class DiscreteTimeStandardHawkesModel(object):
 
         rate = self.compute_rate(index, k)
         # d/dR  S*ln(R) -R*dt
-        grad = S[:, k] / rate  - self.dt * np.ones(T)
+        grad = S[:, k] / rate - self.dt * np.ones(T)
         return grad
 
     def _d_rate_d_W(self, index, k):
@@ -366,7 +365,7 @@ class DiscreteTimeStandardHawkesModel(object):
         d{e^u}/du = e^u
                   = W
         """
-        return np.diag(self.weights[k,:])
+        return np.diag(self.weights[k, :])
 
     def _d_log_prior_d_log_W(self, k):
         """
@@ -384,8 +383,8 @@ class DiscreteTimeStandardHawkesModel(object):
         So why does BFGS not converge monotonically?
 
         """
-        d_log_prior_d_log_W = np.zeros_like(self.weights[k,:])
-        d_log_prior_d_log_W[1:] = self.alpha  - self.beta * self.weights[k, 1:]
+        d_log_prior_d_log_W = np.zeros_like(self.weights[k, :])
+        d_log_prior_d_log_W[1:] = self.alpha - self.beta * self.weights[k, 1:]
         return d_log_prior_d_log_W
 
     def _d_log_prior_d_W(self, k):
@@ -396,7 +395,7 @@ class DiscreteTimeStandardHawkesModel(object):
         LN p(W)       = (\alpha-1)LN W - \beta W
         d/dW LN p(W)) = (\alpha -1)/W  - \beta
         """
-        d_log_prior_d_W = np.zeros_like(self.weights[k,:])
+        d_log_prior_d_W = np.zeros_like(self.weights[k, :])
         if self.alpha > 1.0:
             d_log_prior_d_W[1:] += (self.alpha-1) / self.weights[k, 1:]
 
@@ -414,18 +413,19 @@ class DiscreteTimeStandardHawkesModel(object):
             bnds = None
 
         def objective(x, k):
-            self.weights[k,:] = np.exp(x)
-            self.weights[k,:] = np.nan_to_num(self.weights[k,:])
+            self.weights[k, :] = np.exp(x)
+            self.weights[k, :] = np.nan_to_num(self.weights[k, :])
             return np.nan_to_num(-self.log_posterior(ks=np.array([k])))
 
         def gradient(x, k):
-            self.weights[k,:] = np.exp(x)
-            self.weights[k,:] = np.nan_to_num(self.weights[k,:])
-            dll_dW =  -self.compute_gradient(k)
+            self.weights[k, :] = np.exp(x)
+            self.weights[k, :] = np.nan_to_num(self.weights[k, :])
+            dll_dW = -self.compute_gradient(k)
             d_W_d_log_W = self._d_W_d_logW(k)
             return np.nan_to_num(dll_dW.dot(d_W_d_log_W))
 
         itr = [0]
+
         def callback(x):
             # if itr[0] % 10 == 0:
             #     print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
@@ -434,14 +434,14 @@ class DiscreteTimeStandardHawkesModel(object):
         for k in range(self.K):
             # print "Optimizing process ", k
             itr[0] = 0
-            x0 = np.log(self.weights[k,:])
+            x0 = np.log(self.weights[k, :])
             res = minimize(objective,           # Objective function
                            x0,                  # Initial value
                            jac=gradient,        # Gradient of the objective
                            args=(k,),           # Arguments to the objective and gradient fns
                            bounds=bnds,         # Bounds on x
                            callback=callback)
-            self.weights[k,:] = np.exp(res.x)
+            self.weights[k, :] = np.exp(res.x)
 
     def fit_with_bfgs(self):
         """
@@ -454,14 +454,15 @@ class DiscreteTimeStandardHawkesModel(object):
             bnds = [(1e-16, None)] * (1 + self.K * self.B)
 
         def objective(x, k):
-            self.weights[k,:] = x
+            self.weights[k, :] = x
             return np.nan_to_num(-self.log_posterior(ks=np.array([k])))
 
         def gradient(x, k):
-            self.weights[k,:] = x
+            self.weights[k, :] = x
             return np.nan_to_num(-self.compute_gradient(k))
 
         itr = [0]
+
         def callback(x):
             # if itr[0] % 10 == 0:
             #     print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
@@ -470,14 +471,14 @@ class DiscreteTimeStandardHawkesModel(object):
         for k in range(self.K):
             # print "Optimizing process ", k
             itr[0] = 0
-            x0 = self.weights[k,:]
+            x0 = self.weights[k, :]
             res = minimize(objective,           # Objective function
                            x0,                  # Initial value
                            jac=gradient,        # Gradient of the objective
                            args=(k,),           # Arguments to the objective and gradient fns
                            bounds=bnds,         # Bounds on x
                            callback=callback)
-            self.weights[k,:] = res.x
+            self.weights[k, :] = res.x
 
     def gradient_descent_step(self, stepsz=0.01):
         grad = np.zeros((self.K, 1+self.K*self.B))
@@ -485,8 +486,8 @@ class DiscreteTimeStandardHawkesModel(object):
         # Compute gradient and take a step for each process
         for k in range(self.K):
             d_W_d_log_W = self._d_W_d_logW(k)
-            grad[k,:] = self.compute_gradient(k).dot(d_W_d_log_W)
-            self.weights[k,:] = np.exp(np.log(self.weights[k,:]) + stepsz * grad[k,:])
+            grad[k, :] = self.compute_gradient(k).dot(d_W_d_log_W)
+            self.weights[k, :] = np.exp(np.log(self.weights[k, :]) + stepsz * grad[k, :])
 
         # Compute the current objective
         ll = self.log_likelihood()
@@ -511,14 +512,14 @@ class DiscreteTimeStandardHawkesModel(object):
         # Compute gradient and take a step for each process
         for k in range(self.K):
             d_W_d_log_W = self._d_W_d_logW(k)
-            grad[k,:] = self.compute_gradient(k, indices=[mb]).dot(d_W_d_log_W) / T
-            velocity[k,:] = momentum * prev_velocity[k,:] + learning_rate * grad[k,:]
+            grad[k, :] = self.compute_gradient(k, indices=[mb]).dot(d_W_d_log_W) / T
+            velocity[k, :] = momentum * prev_velocity[k, :] + learning_rate * grad[k, :]
 
             # Gradient steps are taken in log weight space
-            log_weightsk = np.log(self.weights[k,:]) + velocity[k,:]
+            log_weightsk = np.log(self.weights[k, :]) + velocity[k, :]
 
             # The true weights are stored
-            self.weights[k,:] = np.exp(log_weightsk)
+            self.weights[k, :] = np.exp(log_weightsk)
 
         # Compute the current objective
         ll = self.log_likelihood()
@@ -534,22 +535,22 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
     """
 
     # Define the model components and their default hyperparameters
-    _basis_class            = CosineBasis
-    _default_basis_hypers   = {'norm': True, 'allow_instantaneous': False}
+    _basis_class = CosineBasis
+    _default_basis_hypers = {'norm': True, 'allow_instantaneous': False}
 
-    _bkgd_class             = GammaBias
-    _default_bkgd_hypers    = {'alpha': 1.0, 'beta': 10.0}
+    _bkgd_class = GammaBias
+    _default_bkgd_hypers = {'alpha': 1.0, 'beta': 10.0}
 
-    _impulse_class          = DirichletImpulseResponses
-    _default_impulse_hypers = {'gamma' : 1.0}
+    _impulse_class = DirichletImpulseResponses
+    _default_impulse_hypers = {'gamma': 1.0}
 
     # Weight, parent, and network class must be specified by subclasses
-    _weight_class           = None
-    _default_weight_hypers  = {}
+    _weight_class = None
+    _default_weight_hypers = {}
 
-    _parent_class           = DiscreteTimeParents
+    _parent_class = DiscreteTimeParents
 
-    _network_class          = None
+    _network_class = None
     _default_network_hypers = {}
 
     def __init__(self, K, dt=1.0, dt_max=10.0, B=5,
@@ -563,10 +564,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
 
         :param K:  Number of processes
         """
-        self.K      = K
-        self.dt     = dt
+        self.K = K
+        self.dt = dt
         self.dt_max = dt_max
-        self.B      = B
+        self.B = B
 
         # Initialize the data list to empty
         self.data_list = []
@@ -576,7 +577,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         if basis is not None:
             # assert basis.B == B
             self.basis = basis
-            self.B     = basis.B
+            self.B = basis.B
         else:
             # Use the given basis hyperparameters
             self.basis_hypers = copy.deepcopy(self._default_basis_hypers)
@@ -628,7 +629,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             self.weight_hypers = copy.deepcopy(self._default_weight_hypers)
             self.weight_hypers.update(weight_hypers)
             self.weight_model = self._weight_class(self, **self.weight_hypers)
-
 
     # Expose basic variables
     @property
@@ -692,8 +692,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         # Clip g to make sure it is stable for MF updates
         g = standard_model.G
         g = np.clip(g, 1e-2, np.inf)
-        g = g / g.sum(axis=2)[:,:, None]
-
+        g = g / g.sum(axis=2)[:, :, None]
 
         # We need to decide how to set A.
         # The simplest is to initialize it to all ones, but
@@ -707,9 +706,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
 
         # Set the model parameters
         self.bias_model.lambda0 = lambda0.copy('C')
-        self.weight_model.A     = A.copy('C')
-        self.weight_model.W     = W.copy('C')
-        self.impulse_model.g    = g.copy('C')
+        self.weight_model.A = A.copy('C')
+        self.weight_model.W = W.copy('C')
+        self.impulse_model.g = g.copy('C')
 
     def add_data(self, S, F=None, minibatchsize=None, indices=None):
         """
@@ -721,8 +720,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
                   and each process.
         """
         assert isinstance(S, np.ndarray) and S.ndim == 2 and S.shape[1] == self.K \
-               and np.amin(S) >= 0 and S.dtype == np.int, \
-               "Data must be a TxK array of event counts"
+            and np.amin(S) >= 0 and S.dtype == np.int, \
+            "Data must be a TxK array of event counts"
 
         T = S.shape[0]
 
@@ -744,8 +743,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             for offset in np.arange(T, step=minibatchsize):
                 end = min(offset+minibatchsize, T)
                 T_mb = end - offset
-                S_mb = S[offset:end,:]
-                F_mb = F[offset:end,:]
+                S_mb = S[offset:end, :]
+                F_mb = F[offset:end, :]
                 minibatchfrac = float(T_mb) / T
 
                 # Instantiate parent object for this minibatch
@@ -783,7 +782,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
     def copy_sample(self):
         """
         Return a copy of the parameters of the model
-        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        :return: The parameters of the model (A,W,lambda_0, beta)
         """
         # return copy.deepcopy(self.get_parameters())
 
@@ -818,7 +817,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         G = np.tensordot(self.basis.basis, self.impulse_model.g, axes=([1], [2]))
         L = self.basis.L
         assert G.shape == (L, self.K, self.K)
-        H = self.weight_model.W_effective[None,:,:] * G
+        H = self.weight_model.W_effective[None, :, :] * G
 
         # Transpose H so that it is faster for tensor mult
         H = np.transpose(H, axes=[0, 2, 1])
@@ -827,7 +826,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         R = np.zeros((T+L, self.K))
 
         # Add the background rate
-        R += self.bias_model.lambda0[None,:]
+        R += self.bias_model.lambda0[None, :]
 
         # iterator = progprint_xrange(T, perline=print_interval) if verbose else xrange(T)
         iterator = list(range(T))
@@ -835,11 +834,11 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         # Iterate over time bins
         for t in iterator:
             # Sample a Poisson number of events for each process
-            S[t,:] = np.random.poisson(R[t,:] * self.dt)
+            S[t, :] = np.random.poisson(R[t, :] * self.dt)
 
             # Compute change in rate via tensor product
-            dR = np.tensordot( H, S[t,:], axes=([2, 0]))
-            R[t:t+L,:] += dR
+            dR = np.tensordot(H, S[t, :], axes=([2, 0]))
+            R[t:t+L, :] += dR
 
             # For each sampled event, add a weighted impulse response to the rate
             # for k in xrange(self.K):
@@ -852,14 +851,13 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             #     import pdb; pdb.set_trace()
 
         # Only keep the first T time bins
-        S = S[:T,:].astype(np.int)
-        R = R[:T,:]
+        S = S[:T, :].astype(np.int)
+        R = R[:T, :]
 
         if keep:
             # Xs = [X[:T,:] for X in Xs]
             # data = np.hstack(Xs + [S])
             self.add_data(S)
-
 
         return S, R
 
@@ -869,11 +867,11 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         :return:
         """
         return self.weight_model.A, \
-               self.weight_model.W, \
-               self.impulse_model.g, \
-               self.bias_model.lambda0, \
-               self.network.p, \
-               self.network.v
+            self.weight_model.W, \
+            self.impulse_model.g, \
+            self.bias_model.lambda0, \
+            self.network.p, \
+            self.network.v
 
     def set_parameters(self, params):
         """
@@ -888,15 +886,15 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             "A must be a KxK adjacency matrix"
 
         assert isinstance(W, np.ndarray) and W.shape == (K, K) \
-               and np.amin(W) >= 0, \
+            and np.amin(W) >= 0, \
             "W must be a KxK weight matrix"
 
         assert isinstance(beta, np.ndarray) and beta.shape == (K, K, B) and \
-               np.allclose(beta.sum(axis=2), 1.0), \
+            np.allclose(beta.sum(axis=2), 1.0), \
             "beta must be a KxKxB impulse response array"
 
         assert isinstance(lambda0, np.ndarray) and lambda0.shape == (K,) \
-               and np.amin(lambda0) >=0, \
+            and np.amin(lambda0) >= 0, \
             "lambda0 must be a K-vector of background rates"
 
         self.weight_model.A = A
@@ -937,16 +935,16 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             R = np.zeros((T, K))
 
             # Background rate
-            R += self.bias_model.lambda0[None,:]
+            R += self.bias_model.lambda0[None, :]
 
             # Compute the sum of weighted sum of impulse responses
-            H = self.weight_model.W_effective[:,:, None] * \
+            H = self.weight_model.W_effective[:, :, None] * \
                 self.impulse_model.g
 
             H = np.transpose(H, [2, 0, 1])
 
             for k2 in range(self.K):
-                R[:, k2] += np.tensordot(F, H[:,:, k2], axes=([2, 1], [0, 1]))
+                R[:, k2] += np.tensordot(F, H[:, :, k2], axes=([2, 1], [0, 1]))
 
             return R
 
@@ -960,7 +958,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
 
             # Compute the sum of weighted sum of impulse responses
             H = self.weight_model.W_effective[:, proc, None] * \
-                self.impulse_model.g[:, proc,:]
+                self.impulse_model.g[:, proc, :]
 
             R += np.tensordot(F, H, axes=([1, 2], [0, 1]))
 
@@ -993,7 +991,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
 
     def log_prior(self):
         # Get the parameter priors
-        lp  = 0
+        lp = 0
         # lp += self.bias_model.log_probability()
         lp += self.weight_model.log_probability()
         # lp += self.impulse_model.log_probability()
@@ -1014,7 +1012,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             exp_ll += self.data_list[ind].expected_log_likelihood()
 
         return exp_ll
-
 
     def log_likelihood(self, indices=None):
         """
@@ -1130,12 +1127,12 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
                         continue
 
                     ln = ax.arrow(irad*np.cos(ths[k1]), irad*np.sin(ths[k1]),
-                                 .8*irad*(np.cos(ths[k2])-np.cos(ths[k1])),
-                                 .8*irad*(np.sin(ths[k2])-np.sin(ths[k1])),
-                                 width=0.3,
-                                 head_width=2.,
-                                 color=color,
-                                 length_includes_head=True)
+                                  .8*irad*(np.cos(ths[k2])-np.cos(ths[k1])),
+                                  .8*irad*(np.sin(ths[k2])-np.sin(ths[k1])),
+                                  width=0.3,
+                                  head_width=2.,
+                                  color=color,
+                                  length_includes_head=True)
                     ln.set_linewidth(3*W_eff[k1, k2])
 
                     # Arrow is only visible if there is a connection
@@ -1171,7 +1168,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         rates = self.compute_rate(data_index)
         S = data.S
         T_slice = T_slice if T_slice is not None else (0, data.T)
-        ymax = np.max(S[T_slice[0]:T_slice[1],:])
+        ymax = np.max(S[T_slice[0]:T_slice[1], :])
 
         if lns is None:
             lns = []
@@ -1212,15 +1209,16 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
 
         return lns
 
-class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
-    _weight_class           = SpikeAndSlabGammaWeights
-    _default_weight_hypers  = {}
 
-    _network_class          = ErdosRenyiFixedSparsity
+class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
+    _weight_class = SpikeAndSlabGammaWeights
+    _default_weight_hypers = {}
+
+    _network_class = ErdosRenyiFixedSparsity
     _default_network_hypers = {'p': 0.5,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': None, 'beta': None,}
+                               'v': None, 'alpha': None, 'beta': None, }
 
     def resample_model(self):
         """
@@ -1254,7 +1252,7 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
 
 
 class DiscreteTimeNetworkHawkesModelSpikeAndSlabSBM(DiscreteTimeNetworkHawkesModelSpikeAndSlab):
-    _network_class          = StochasticBlockModel
+    _network_class = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
                                'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
@@ -1264,15 +1262,15 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlabSBM(DiscreteTimeNetworkHawkesMod
 
 
 class DiscreteTimeNetworkHawkesModelGammaMixture(
-    _DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling, ModelMeanField):
-    _weight_class           = GammaMixtureWeights
-    _default_weight_hypers  = {'kappa_0': 0.1, 'nu_0': 1000.0}
+        _DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling, ModelMeanField):
+    _weight_class = GammaMixtureWeights
+    _default_weight_hypers = {'kappa_0': 0.1, 'nu_0': 1000.0}
 
-    _network_class          = ErdosRenyiFixedSparsity
+    _network_class = ErdosRenyiFixedSparsity
     _default_network_hypers = {'p': 0.5,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': None, 'beta': None,}
+                               'v': None, 'alpha': None, 'beta': None, }
 
     def resample_model(self, resample_network=True):
         """
@@ -1302,16 +1300,16 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
         # Set the mean field parameters
         self.bias_model.mf_alpha = np.clip(100 * self.bias_model.lambda0, 1e-8, np.inf)
-        self.bias_model.mf_beta  = 100 * np.ones(self.K)
+        self.bias_model.mf_beta = 100 * np.ones(self.K)
 
         # Weight model
         self.weight_model.mf_kappa_0 = self.weight_model.nu_0 * self.weight_model.W.copy()
-        self.weight_model.mf_v_0     = self.weight_model.nu_0 * np.ones((self.K, self.K))
+        self.weight_model.mf_v_0 = self.weight_model.nu_0 * np.ones((self.K, self.K))
 
         self.weight_model.mf_kappa_1 = 100 * self.weight_model.W.copy()
-        self.weight_model.mf_v_1     = 100 * np.ones((self.K, self.K))
+        self.weight_model.mf_v_1 = 100 * np.ones((self.K, self.K))
 
-        self.weight_model.mf_p       = 0.8 * self.weight_model.A + 0.2 * (1-self.weight_model.A)
+        self.weight_model.mf_p = 0.8 * self.weight_model.A + 0.2 * (1-self.weight_model.A)
 
         # Set mean field parameters of the impulse model
         self.impulse_model.mf_gamma = 100 * self.impulse_model.g.copy('C')
@@ -1425,7 +1423,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
 class DiscreteTimeNetworkHawkesModelGammaMixtureSBM(DiscreteTimeNetworkHawkesModelGammaMixture):
     # This model uses an SBM with beta-distributed sparsity levels
-    _network_class          = StochasticBlockModel
+    _network_class = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
                                'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
@@ -1435,16 +1433,16 @@ class DiscreteTimeNetworkHawkesModelGammaMixtureSBM(DiscreteTimeNetworkHawkesMod
 
 
 class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
-    _default_bkgd_hypers = {"alpha" : 1.0, "beta" : 1.0}
-    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
+    _default_bkgd_hypers = {"alpha": 1.0, "beta": 1.0}
+    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0": 1.0}
     _default_exp_impulse_hypers = {"alpha_0": 1.0, "beta_0": 1.0}
     _default_weight_hypers = {"parallel_resampling": True}
 
-    _network_class          = ErdosRenyiFixedSparsity
+    _network_class = ErdosRenyiFixedSparsity
     _default_network_hypers = {'p': 0.5,
                                'allow_self_connections': False,
                                'kappa': 1.0,
-                               'v': None, 'alpha': None, 'beta': None,}
+                               'v': None, 'alpha': None, 'beta': None, }
 
     def __init__(self, K, dt_max=10.0,
                  bkgd_hypers={},
@@ -1456,7 +1454,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         :param K:  Number of processes
         """
-        self.K      = K
+        self.K = K
         self.dt_max = dt_max
 
         # Initialize the bias
@@ -1493,7 +1491,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Initialize the data list to empty
         self.data_list = []
-
 
     # Expose basic variables
     @property
@@ -1557,7 +1554,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         t_basis = np.clip(t_basis, 1e-6, self.dt_max-1e-6)
         for k1 in range(K):
             for k2 in range(K):
-                std_ir = standard_model.basis.basis.dot(G[k1, k2,:])
+                std_ir = standard_model.basis.basis.dot(G[k1, k2, :])
 
                 def loss(mutau):
                     self.impulse_model.mu[k1, k2] = mutau[0]
@@ -1586,8 +1583,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Set the model parameters
         self.bias_model.lambda0 = lambda0.copy('C')
-        self.weight_model.A     = A.copy('C')
-        self.weight_model.W     = W.copy('C')
+        self.weight_model.A = A.copy('C')
+        self.weight_model.W = W.copy('C')
 
     def add_data(self, S, C, T):
         """
@@ -1602,18 +1599,18 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         assert isinstance(T, float), "T must be a float"
         if len(S) > 0:
             assert isinstance(S, np.ndarray) and S.ndim == 1 \
-                   and S.min() >= 0 and S.max() < T and \
-                   S.dtype == np.float, \
-                   "S must be a N array of event times"
+                and S.min() >= 0 and S.max() < T and \
+                S.dtype == np.float, \
+                "S must be a N array of event times"
 
             # Make sure S is sorted
             assert (np.diff(S) >= 0).all(), "S must be sorted!"
 
         if len(C) > 0:
             assert isinstance(C, np.ndarray) and C.shape == S.shape \
-                   and C.min() >= 0 and C.max() < self.K and \
-                   C.dtype == np.int, \
-                   "C must be a N array of parent indices"
+                and C.min() >= 0 and C.max() < self.K and \
+                C.dtype == np.int, \
+                "C must be a N array of parent indices"
 
         # Instantiate corresponding parent object
         from pyhawkes.internals.parents import ContinuousTimeParents
@@ -1630,7 +1627,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         W, A = self.weight_model.W, self.weight_model.A
         g_mu, g_tau = self.impulse_model.mu, self.impulse_model.tau
 
-
         def _generate_helper(S, C, s_pa, c_pa, round=0):
             # Recursively generate new generations of spikes with
             # given impulse response parameters. Takes in a single spike
@@ -1642,7 +1638,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             for c_ch in np.arange(K):
                 w = W[c_pa, c_ch]
                 a = A[c_pa, c_ch]
-                if w==0 or a==0:
+                if w == 0 or a == 0:
                     continue
 
                 # The total area under the impulse response curve(ratE)  is w
@@ -1699,7 +1695,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         return S, C
 
-
     def check_stability(self):
         """
         Check that the weight matrix is stable
@@ -1722,7 +1717,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     def copy_sample(self):
         """
         Return a copy of the parameters of the model
-        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        :return: The parameters of the model (A,W,lambda_0, beta)
         """
         # return copy.deepcopy(self.get_parameters())
 
@@ -1748,7 +1743,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         W = self.weight_model.W_effective
 
         # Compute it manually
-        '''
+        """
         lmbda = np.zeros(N)
         impulse = self.impulse_model.impulse
         # Resample parents
@@ -1768,7 +1763,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
                 Wparn = W[C[par], C[n]]
                 if Wparn > 0:
                     lmbda[n] += Wparn * impulse(dt, C[par], C[n])
-        '''
+        """
         # Call cython function to evaluate instantaneous rate
         mu, tau = self.impulse_model.mu, self.impulse_model.tau
         min_supp, max_supp = self.impulse_model.support
@@ -1806,7 +1801,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
     def log_prior(self):
         # Get the parameter priors
-        lp  = 0
+        lp = 0
         lp += self.bias_model.log_probability()
         lp += self.weight_model.log_probability()
         lp += self.impulse_model.log_probability()
@@ -1860,9 +1855,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
             # Get the deltas between the time points and the spikes
             # Warning: this can be huge!
-            deltas = t[:, None]-S[None,:]
-            t_deltas, n_deltas = np.where((deltas>0) & (deltas < self.dt_max))
-            N_deltas = t_deltas.size
+            deltas = t[:, None]-S[None, :]
+            t_deltas, n_deltas = np.where((deltas > 0) & (deltas < self.dt_max))
 
             # Find the process the impulse came from
             senders = C[n_deltas]
@@ -1881,9 +1875,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             for k2 in range(self.K):
                 ir[:, k1, k2] = self.impulse_model.impulse(dt, k1, k2)
         return ir, dt
+    # Inference
 
-
-    ### Inference
     def resample_model(self):
         """
         Perform one iteration of the Gibbs sampling algorithm.

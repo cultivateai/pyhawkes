@@ -1,18 +1,22 @@
-import numpy as np
-np.seterr(over="raise", invalid="ignore")
 
-from pybasicbayes.abstractions import GibbsSampling, MeanField
+import numpy as np
 from gslrandom import multinomial
 
-from pyhawkes.utils.utils import initialize_pyrngs
+from pybasicbayes.abstractions import GibbsSampling, MeanField
+from pyhawkes.internals.continuous_time_helpers import (ct_compute_suff_stats,
+                                                        ct_resample_Z_logistic_normal)
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
-from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats, ct_Z_post_distr_logistic_normal
+from pyhawkes.utils.utils import initialize_pyrngs
+
+np.seterr(over="raise", invalid="ignore")
+
 
 class DiscreteTimeParents(GibbsSampling, MeanField):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
     parent variables.
     """
+
     def __init__(self, model, T, S, F, minibatchfrac=1.):
         """
         Initialize a parent array Z of size TxKxKxB to model the
@@ -47,12 +51,12 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         self.Fs = []
         for k in range(self.K):
             # Find the rows where S[:,k] is nonzero
-                tk = np.where(S[:, k])[0]
-                self.ts.append(tk)
-                self.Ts.append(len(tk))
-                self.Ss.append(S[tk, k].astype(np.uint32))
-                self.Ns.append(S[tk, k].sum())
-                self.Fs.append(F[tk])
+            tk = np.where(S[:, k])[0]
+            self.ts.append(tk)
+            self.Ts.append(len(tk))
+            self.Ss.append(S[tk, k].astype(np.uint32))
+            self.Ns.append(S[tk, k].sum())
+            self.Fs.append(F[tk])
         self.Ns = np.array(self.Ns)
 
         # The base class handles the parent variables
@@ -122,8 +126,8 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         W = self.model.weight_model.W_effective
         g = self.model.impulse_model.g
 
-        T, K, B, dt = self.T, self.K, self.B, self.dt
-        Sk, Fk, Tk = self.Ss[k2], self.Fs[k2], self.Ts[k2]
+        T, _, _, dt = self.T, self.K, self.B, self.dt
+        Sk, Fk, _ = self.Ss[k2], self.Fs[k2], self.Ts[k2]
 
         ll = 0
         # Compute the integrated rate
@@ -132,25 +136,24 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         ll += -(W[:, k2] * self.Ns).sum()
 
         # Compute the instantaneous log rate
-        Wk2 = W[:, k2][None,:, None] #(1,K,1)
-        Gk2 = g[:, k2,:][None,:,:] # (1,K,B)
+        Wk2 = W[:, k2][None, :, None]  # (1,K,1)
+        Gk2 = g[:, k2, :][None, :, :]  # (1,K,B)
         lam = lambda0[k2] + (Wk2 * Gk2 * Fk).sum(axis=(1, 2))
 
         ll += (Sk * np.log(lam)).sum()
 
         return ll
 
-
     def rvs(self, data=[]):
         raise NotImplementedError("No prior for parents to sample from.")
 
-    ### Gibbs sampling
+    # Gibbs sampling
     # Compute sufficient statistics
     def compute_bkgd_ss(self):
         # \sum_{t} z_{t,k}^{0} and T * dt
         ss = np.zeros((2, self.K))
 
-        ss[1,:] = self.T * self.dt
+        ss[1, :] = self.T * self.dt
         for k, Zk in enumerate(self.Z):
             ss[0, k] = Zk[:, 0].sum()
         return ss
@@ -160,19 +163,18 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         ss = np.zeros((2, self.K, self.K))
         for k2, Zk in enumerate(self.Z):
             # ss[0,k1,k2] = \sum_t \sum_b Z_{t,k2}^{k1,b}
-            ss[0,:, k2] = Zk[:, 1:].sum(0).reshape((K, B)).sum(1)
+            ss[0, :, k2] = Zk[:, 1:].sum(0).reshape((K, B)).sum(1)
             # ss[1,k1,k2] = N[k1] (to be multiplied by A)
-            ss[1,:, k2] = self.Ns
+            ss[1, :, k2] = self.Ns
         return ss
 
-    '''
     def compute_exact_weight_ss(self):
         """
         DEPENDS ON THE FULL SELF.F
 
-        For comparison, compute the exact sufficient statistics for ss[1,:,:]
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
+        For comparison, compute the exact sufficient statistics for ss[1, :, :]
+        : param data: a TxK array of event counts assigned to the background process
+        : return:
         """
         K, B, F = self.K, self.B, self.F
         A = self.model.weight_model.A
@@ -181,15 +183,14 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
 
         for k2, Zk in enumerate(self.Z):
             # ss[0,k1,k2] = \sum_t \sum_b Z_{t,k2}^{k1,b}
-            ss[0,:,k2] = Zk[:,1:].sum(0).reshape((K,B)).sum(1)
+            ss[0, :, k2] = Zk[:, 1:].sum(0).reshape((K, B)).sum(1)
 
             # ss[1,k1,k2] = A_k1,k2 * \sum_t \sum_b F[t,k1,b] * beta[k1,k2,b]
             for k1 in range(self.K):
                 for k2 in range(self.K):
-                    ss[1,k1,k2] = A[k1,k2] * (F[:,k1,:].dot(beta[k1,k2,:])).sum()
+                    ss[1, k1, k2] = A[k1, k2] * (F[:, k1, :].dot(beta[k1, k2, :])).sum()
 
-        return ss
-    '''
+            return ss
 
     def compute_weight_ss(self):
         return self.compute_approx_weight_ss()
@@ -202,7 +203,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # ss[k1,k2,b] = \sum_t z_{t,k2}^{k1,b}
         ss = np.zeros((self.K, self.K, self.B))
         for k2, Zk in enumerate(self.Z):
-            ss[:, k2,:] = Zk[:, 1:].sum(0).reshape((K, B))
+            ss[:, k2, :] = Zk[:, 1:].sum(0).reshape((K, B))
         return ss
 
     def _resample_Z_python(self):
@@ -220,10 +221,10 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
                 # Compute the normalized probability vector for the background rate and
                 # each of the basis functions for every other process
                 p = np.zeros(1 + self.K * self.B)
-                p[0]  = bias_model.lambda0[k2]                  # Background
+                p[0] = bias_model.lambda0[k2]                  # Background
                 Wk2 = weight_model.W_effective[:, k2]            # (K,)
-                Gk2 = impulse_model.g[:, k2,:]                   # (K,B)
-                p[1:] = (ft *  Wk2[:, None] * Gk2).ravel()
+                Gk2 = impulse_model.g[:, k2, :]                   # (K,B)
+                p[1:] = (ft * Wk2[:, None] * Gk2).ravel()
 
                 # Normalize
                 p = p / p.sum()
@@ -251,7 +252,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             P[:, 0] = bias_model.lambda0[k2]
 
             Wk2 = np.repeat(weight_model.W_effective[:, k2], B)
-            Gk2 = impulse_model.g[:, k2,:].reshape((K*B,), order="C")
+            Gk2 = impulse_model.g[:, k2, :].reshape((K*B,), order="C")
             P[:, 1:] = Wk2 * Gk2 * Fk.reshape((Tk, K*B))
 
             # Normalize the rows
@@ -263,22 +264,22 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # DEBUG
         # self._check_Z()
 
-    def resample(self,data=[]):
+    def resample(self, data=[]):
         # self._resample_Z_python()
         self._resample_Z_gsl()
 
-    ### Mean Field
+    # Mean Field
     def expected_log_likelihood(self):
         """
         Compute the expected log likelihood of the data
         This is actually a bit tricky because we can't simply compute
-        E[log \lambda_{t,k}] = E[log(\lambda_0 + \sum_{k,b} W_k g_{kb})]
+        E[log lambda_{t,k}] = E[log(lambda_0 + sum_{k,b} W_k g_{kb})]
 
         Instead, let's just lower bound it with Jensens inequality
         """
         bias_model, weight_model, impulse_model = \
             self.model.bias_model, self.model.weight_model, self.model.impulse_model
-        T, dt, K, B = self.T, self.dt, self.K, self.B
+        T, dt, _, _ = self.T, self.dt, self.K, self.B
 
         exp_lam0 = bias_model.expected_lambda0()
         exp_W = weight_model.expected_W()
@@ -292,21 +293,21 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             exp_ll += -(exp_W[:, k2] * self.Ns).sum()
 
             # Compute the instantaneous log rate
-            exp_lam = exp_lam0[k2] + (Fk * exp_W[:, k2][:, None] * exp_G[:, k2,:]).sum(axis=(1, 2))
+            exp_lam = exp_lam0[k2] + (Fk * exp_W[:, k2][:, None] * exp_G[:, k2, :]).sum(axis=(1, 2))
 
             # Use Jensen's inequality
             exp_ll += (Sk * np.log(exp_lam)).sum()
         return exp_ll
 
-
     # Compute expected sufficient statistics
+
     def compute_exp_bkgd_ss(self):
         # \sum_{t} z_{t,k}^{0} and T * dt
         ss = np.zeros((2, self.K))
         for k, EZk in enumerate(self.EZ):
             ss[0, k] = EZk[:, 0].sum()
 
-        ss[1,:] = self.T * self.dt
+        ss[1, :] = self.T * self.dt
         return ss
 
     def compute_exp_weight_ss(self):
@@ -314,9 +315,9 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         ss = np.zeros((2, self.K, self.K))
         for k2, EZk in enumerate(self.EZ):
             # ss[0,k1,k2] = \sum_t \sum_b Z_{t,k2}^{k1,b}
-            ss[0,:, k2] = EZk[:, 1:].sum(0).reshape((K, B)).sum(1)
+            ss[0, :, k2] = EZk[:, 1:].sum(0).reshape((K, B)).sum(1)
             # ss[1,k1,k2] = N[k1] (to be multiplied by A)
-            ss[1,:, k2] = self.Ns
+            ss[1, :, k2] = self.Ns
         return ss
 
     def compute_exp_ir_ss(self):
@@ -327,11 +328,11 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # ss[k1,k2,b] = \sum_t z_{t,k2}^{k1,b}
         ss = np.zeros((self.K, self.K, self.B))
         for k2, EZk in enumerate(self.EZ):
-            ss[:, k2,:] = EZk[:, 1:].sum(0).reshape((K, B))
+            ss[:, k2, :] = EZk[:, 1:].sum(0).reshape((K, B))
         return ss
 
-
     # Mean field updates!
+
     def _mf_update_Z_python(self):
         """
         Update the mean field parameters for the latent parents
@@ -345,10 +346,10 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             Sk = Sk.astype(np.float)
             # Compute the normalized probability vector for the background rate and
             # each of the basis functions for every other process
-            p0  = np.exp(bias_model.expected_log_lambda0()[k2])     # scalar
+            p0 = np.exp(bias_model.expected_log_lambda0()[k2])     # scalar
             Wk2 = np.exp(weight_model.expected_log_W()[:, k2])       # (K,)
-            Gk2 = np.exp(impulse_model.expected_log_g()[:, k2,:])    # (K,B)
-            pkb = Fk * Wk2[None,:, None] * Gk2[None,:,:]
+            Gk2 = np.exp(impulse_model.expected_log_g()[:, k2, :])    # (K,B)
+            pkb = Fk * Wk2[None, :, None] * Gk2[None, :, :]
             assert pkb.shape == (Tk, K, B)
 
             pkb = pkb.reshape((-1, K*B))
@@ -369,7 +370,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         """
         bias_model, weight_model, impulse_model = \
             self.model.bias_model, self.model.weight_model, self.model.impulse_model
-        K, B = self.K, self.B
 
         exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
         exp_E_log_W = np.exp(weight_model.expected_log_W())
@@ -390,7 +390,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
     def get_vlb(self):
         bias_model, weight_model, impulse_model = \
             self.model.bias_model, self.model.weight_model, self.model.impulse_model
-        K, B = self.K, self.B
 
         # First term
         # E[LN p(z_tk^0 | \lambda_0)] = - LN z_tk^0! + z_tk^0 * LN \lambda_0 - \lambda_0
@@ -408,7 +407,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
 
     def get_vlb_python(self):
         """
-        E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
+        E_q[ln p(z | lambda)] - E_q[ln q(z)]
         :return:
         """
         bias_model, weight_model, impulse_model = \
@@ -444,8 +443,8 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # Since each impulse response is normalized...
         for k, (EZk, Sk, Fk, Tk, tk) in enumerate(zip(self.EZ, self.Ss, self.Fs, self.Ts, self.ts)):
             E_ln_Wg = (np.log(Fk) +
-                       E_ln_W[:, k][None,:, None] +
-                       E_ln_g[:, k,:][None,:,:])
+                       E_ln_W[:, k][None, :, None] +
+                       E_ln_g[:, k, :][None, :, :])
             E_ln_Wg = np.nan_to_num(E_ln_Wg)
             assert E_ln_Wg.shape == (Tk, K, B)
             vlb += (EZk[:, 1:] * E_ln_Wg.reshape((Tk, K*B))).sum()
@@ -453,7 +452,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             # Compute the sum of E[W] * N
             sum_E_Wg = (self.Ns * E_W[:, k]).sum()
             vlb += -sum_E_Wg
-
 
             # Second term
             ln_u = np.log(EZk[:, 1:] / Sk[:, None].astype(np.float))
@@ -471,6 +469,7 @@ class ContinuousTimeParents(GibbsSampling):
     keep track of the index of the parent.
 
     """
+
     def __init__(self, model, S, C, T, K, dt_max):
         """
         :param S: Length N array of event times
@@ -620,7 +619,7 @@ class ContinuousTimeParents(GibbsSampling):
         # 0: count, # 1: Sum of scaled dt, #2: Sum of sq scaled dt
         return self.imp_ss
 
-    '''
+    """
     def compute_gamma_imp_suff_stats(self):
         # 0: count
         # 1: sum of the data
@@ -636,4 +635,4 @@ class ContinuousTimeParents(GibbsSampling):
                 gam_imp_ss[1, C[par], C[n]] += S[n] - S[par]
                 gam_imp_ss[2, C[par], C[n]] *= S[n] - S[par]
         return gam_imp_ss
-    '''
+    """
