@@ -1,17 +1,5 @@
-import os
 import numpy as np
 
-def initialize_pyrngs():
-    from gslrandom import PyRNG, get_omp_num_threads
-    if "OMP_NUM_THREADS" in os.environ:
-        num_threads = os.environ["OMP_NUM_THREADS"]
-    else:
-        num_threads = get_omp_num_threads()
-    assert num_threads > 0
-
-    # Choose random seeds
-    seeds = np.random.randint(2**16, size=num_threads)
-    return [PyRNG(seed) for seed in seeds]
 
 def convert_discrete_to_continuous(S, dt):
     # Convert S to continuous time
@@ -28,6 +16,7 @@ def convert_discrete_to_continuous(S, dt):
     C_ct = C_ct[perm]
     return S_ct, C_ct, T
 
+
 def convert_continuous_to_discrete(S, C, dt, T_min, T_max):
     bins = np.arange(T_min, T_max, dt)
     if bins[-1] != T_max:
@@ -37,35 +26,19 @@ def convert_continuous_to_discrete(S, C, dt, T_min, T_max):
     K = C.max()+1
     S_dt = np.zeros((T, K))
     for k in range(K):
-        S_dt[:, k] = np.histogram(S[C==k], bins)[0]
+        S_dt[:, k] = np.histogram(S[C == k], bins)[0]
 
     assert S_dt.sum() == len(S)
     return S_dt
 
-def get_unique_file_name(filedir, filename):
-    """
-    Get a unique filename by appending filename with .x, where x
-    is the next untaken number
-    """
-    import fnmatch
-    
-    # Get the number of conflicting log files
-    fnames = os.listdir(filedir)
-    conflicts = fnmatch.filter(fnames, "%s*" % filename)
-    nconflicts = len(conflicts)
-    
-    if nconflicts > 0:
-        unique_name = "%s.%d" % (filename, nconflicts+1)
-    else:
-        unique_name = filename
-        
-    return unique_name
 
-def logistic(x,lam_max=1.0):
+def logistic(x, lam_max=1.0):
     return lam_max*1.0/(1.0+np.exp(-x))
 
-def logit(x,lam_max=1.0):
+
+def logit(x, lam_max=1.0):
     return np.log(x/lam_max)-np.log(1-(x/lam_max))
+
 
 def sample_nig(mu0, lmbda0, alpha0, beta0):
     mu0, lmbda0, alpha0, beta0 = np.broadcast_arrays(mu0, lmbda0, alpha0, beta0)

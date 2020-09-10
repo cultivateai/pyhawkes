@@ -18,8 +18,6 @@ from pyhawkes.internals.weights import (GammaMixtureWeights,
                                         SpikeAndSlabGammaWeights)
 from pyhawkes.utils.basis import CosineBasis
 
-# TODO: Add a simple HomogeneousPoissonProcessModel
-
 
 class DiscreteTimeStandardHawkesModel(object):
     """
@@ -66,8 +64,8 @@ class DiscreteTimeStandardHawkesModel(object):
         self.beta = beta
 
         # Initialize with sample from Gamma(alpha, beta)
-        # self.weights = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K, 1 + self.K*self.B))
-        # self.weights = self.alpha/self.beta * np.ones((self.K, 1 + self.K*self.B))
+        # self.weights = \
+        #    self.alpha/self.beta * np.ones((self.K, 1 + self.K*self.B))
         self.weights = 1e-3 * np.ones((self.K, 1 + self.K*self.B))
         if not self.allow_self_connections:
             self._remove_self_weights()
@@ -1062,7 +1060,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
             # Plot the rates on the right
             axs_rate = [plt.subplot2grid((self.K, 4), (k, 1), rowspan=1, colspan=rate_width)
                         for k in range(self.K)]
-            rate_lns = self.plot_rates(axs=axs_rate, data_index=data_index, T_slice=T_slice, color=color)
+            rate_lns = self.plot_rates(axs=axs_rate, data_index=data_index,
+                                       T_slice=T_slice, color=color)
 
             plt.subplots_adjust(wspace=1.0)
 
@@ -1161,7 +1160,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
 
         return lns
 
-    def plot_rates(self, lns=None, axs=None, draw_events=True, data_index=0, T_slice=None, color="#377eb8"):
+    def plot_rates(self, lns=None, axs=None, draw_events=True, data_index=0,
+                   T_slice=None, color="#377eb8"):
         import matplotlib.pyplot as plt
         assert len(self.data_list) > data_index
         data = self.data_list[data_index]
@@ -1210,7 +1210,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
         return lns
 
 
-class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
+class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase,
+                                                 ModelGibbsSampling):
     _weight_class = SpikeAndSlabGammaWeights
     _default_weight_hypers = {}
 

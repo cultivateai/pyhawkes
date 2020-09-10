@@ -1,12 +1,9 @@
-
 import numpy as np
-from gslrandom import multinomial
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField
 from pyhawkes.internals.continuous_time_helpers import (ct_compute_suff_stats,
                                                         ct_resample_Z_logistic_normal)
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
-from pyhawkes.utils.utils import initialize_pyrngs
 
 np.seterr(over="raise", invalid="ignore")
 
@@ -15,6 +12,8 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
     parent variables.
+
+    To use, install gslrandom
     """
 
     def __init__(self, model, T, S, F, minibatchfrac=1.):
@@ -66,7 +65,10 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         self._EZ = None
 
         # Initialize GSL RNGs for resampling Z
-        self.pyrngs = initialize_pyrngs()
+        from gslrandom import PyRNG, get_omp_num_threads
+        num_threads = max(1, get_omp_num_threads())
+        seeds = np.random.randint(2**16, size=num_threads)
+        self.pyrngs = [PyRNG(seed) for seed in seeds]
 
     @property
     def Z(self):
@@ -243,6 +245,8 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         :param impulse_model:
         :return:
         """
+        from gslrandom import multinomial
+
         bias_model, weight_model, impulse_model = \
             self.model.bias_model, self.model.weight_model, self.model.impulse_model
         K, B = self.K, self.B
