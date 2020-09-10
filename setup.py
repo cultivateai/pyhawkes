@@ -35,7 +35,7 @@ for e in ext_modules:
 
 setup(
       name='pyhawkes',
-      version='1.0.0',
+      version='1.0.1',
       description='pyhawkes library',
       cmdclass={'build_ext': build_ext},
       ext_modules=ext_modules,
